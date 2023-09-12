@@ -303,8 +303,8 @@ void main(void)
             time = timeint*0.25;
             sinvalue = ampl*sin(2*PI*frequency*time) + offset;
             satvalue = saturate(sinvalue, 2.65);
-            //serial_printf(&SerialA,"timeint:%ld, time: %.2f, sinvalue: %.3f, satvalue: %.2f\r\n",timeint,time,sinvalue,satvalue);
-            serial_printf(&SerialA,"timeint: %d, test1: %d, test2: %d, test3: %d \r\n",timeint,test1,test2,test3);
+            serial_printf(&SerialA,"timeint:%ld, time: %.2f, sinvalue: %.3f, satvalue: %.2f\r\n",timeint,time,sinvalue,satvalue);
+            //serial_printf(&SerialA,"timeint: %d, test1: %d, test2: %d, test3: %d \r\n",timeint,test1,test2,test3);
 
             UARTPrint = 0;//YL$ Without this line, once timer2's interrupt function is called, the serial_printf function will continue to be called whether or not the interrupt function is called. So, we don't know how many times the interrupt function is called from the second call.
         }
@@ -388,7 +388,7 @@ __interrupt void cpu_timer2_isr(void)
 float saturate(float input, float saturation_limit)
 {
     float output = 0;
-    if (abs(input) < abs(saturation_limit)) {
+    if (fabs(input) < fabs(saturation_limit)) {
         output = input;
     } else if (input < 0) {
         output = -saturation_limit;
