@@ -33,9 +33,6 @@ __interrupt void cpu_timer1_isr(void);
 __interrupt void cpu_timer2_isr(void);
 __interrupt void SWI_isr(void);
 
-void SetLEDRowsOnOff(int16_t rows);
-int16_t ReadSwitches(void);
-
 // Count variables
 uint32_t numTimer0calls = 0;
 uint32_t numSWIcalls = 0;
@@ -43,9 +40,38 @@ extern uint32_t numRXA;
 uint16_t UARTPrint = 0;
 uint16_t LEDdisplaynum = 0;
 
-int32_t numTimer2calls = 0;
+int16_t updown = 0;
+int16_t updown2 = 0;
 
-int16_t gsw = 0;
+float controleffort = 0;
+
+float saturate(float input, float saturation_limit)
+{
+    float output = 0;
+    if (fabs(input) < fabs(saturation_limit)) {
+        output = input;
+    } else if (input < 0) {
+        output = -saturation_limit;
+    } else {
+        output = saturation_limit;
+    }
+    return output;
+}
+
+
+void setEPWM2A(float controleffort)
+{
+    float duty = 0;
+    duty = (saturate(controleffort, 10) + 10)/20;
+    EPwm2Regs.CMPA.bit.CMPA = duty*EPwm2Regs.TBPRD;
+}
+
+void setEPWM2B(float controleffort)
+{
+    float duty = 0;
+    duty = (saturate(controleffort, 10) + 10)/20;
+    EPwm2Regs.CMPB.bit.CMPB = duty*EPwm2Regs.TBPRD;
+}
 
 void main(void)
 {
@@ -66,7 +92,7 @@ void main(void)
     GpioDataRegs.GPBSET.bit.GPIO34 = 1;
 
     // LED1 and PWM Pin
-    GPIO_SetupPinMux(22, GPIO_MUX_CPU1, 0);
+    GPIO_SetupPinMux(22, GPIO_MUX_CPU1, 5);
     GPIO_SetupPinOptions(22, GPIO_OUTPUT, GPIO_PUSHPULL);
     GpioDataRegs.GPACLEAR.bit.GPIO22 = 1;
 
@@ -255,14 +281,82 @@ void main(void)
     // 200MHz CPU Freq,                       Period (in uSeconds)
     ConfigCpuTimer(&CpuTimer0, LAUNCHPAD_CPU_FREQUENCY, 10000);
     ConfigCpuTimer(&CpuTimer1, LAUNCHPAD_CPU_FREQUENCY, 20000);
-    ConfigCpuTimer(&CpuTimer2, LAUNCHPAD_CPU_FREQUENCY, 250000);
+    ConfigCpuTimer(&CpuTimer2, LAUNCHPAD_CPU_FREQUENCY, 1000);
 
     // Enable CpuTimer Interrupt bit TIE
-    //CpuTimer0Regs.TCR.all = 0x4000;
-    //CpuTimer1Regs.TCR.all = 0x4000;
+    CpuTimer0Regs.TCR.all = 0x4000;
+    CpuTimer1Regs.TCR.all = 0x4000;
     CpuTimer2Regs.TCR.all = 0x4000;
 
     init_serialSCIA(&SerialA,115200);
+    // YL$JR$Initial settings for EPWM12Regs
+    EPwm12Regs.TBCTL.bit.CTRMODE = 0;
+    EPwm12Regs.TBCTL.bit.FREE_SOFT = 2;
+    EPwm12Regs.TBCTL.bit.PHSEN = 0;
+    EPwm12Regs.TBCTL.bit.CLKDIV = 0;
+    EPwm12Regs.TBCTR = 0;
+    EPwm12Regs.TBPRD = 2500;
+    EPwm12Regs.CMPA.bit.CMPA = 0;
+    EPwm12Regs.AQCTLA.bit.CAU = 1;
+    EPwm12Regs.AQCTLA.bit.ZRO = 2;
+
+    EPwm12Regs.TBPHS.bit.TBPHS = 2;
+
+    // YL$JR$Initial settings for EPWM2Regs
+    EPwm2Regs.TBCTL.bit.CTRMODE = 0;
+    EPwm2Regs.TBCTL.bit.FREE_SOFT = 2;
+    EPwm2Regs.TBCTL.bit.PHSEN = 0;
+    EPwm2Regs.TBCTL.bit.CLKDIV = 0;
+    EPwm2Regs.TBCTR = 0;
+    EPwm2Regs.TBPRD = 2500;
+    EPwm2Regs.CMPA.bit.CMPA = 1250;
+    EPwm2Regs.CMPB.bit.CMPB = 1250;
+    EPwm2Regs.AQCTLA.bit.CAU = 1;
+    EPwm2Regs.AQCTLA.bit.ZRO = 2;
+    EPwm2Regs.AQCTLB.bit.CBU = 1;
+    EPwm2Regs.AQCTLB.bit.ZRO = 2;
+    EPwm2Regs.TBPHS.bit.TBPHS = 2;
+    GPIO_SetupPinMux(2, GPIO_MUX_CPU1, 1);
+    GPIO_SetupPinMux(3, GPIO_MUX_CPU1, 1);
+
+    // YL$JR$Initial settings for EPWM8Regs
+    EPwm8Regs.TBCTL.bit.CTRMODE = 0;
+    EPwm8Regs.TBCTL.bit.FREE_SOFT = 2;
+    EPwm8Regs.TBCTL.bit.PHSEN = 0;
+    EPwm8Regs.TBCTL.bit.CLKDIV = 0;
+    EPwm8Regs.TBCTR = 0;
+    EPwm8Regs.TBPRD = 2500;
+    EPwm8Regs.CMPA.bit.CMPA = 0;
+    EPwm8Regs.CMPB.bit.CMPB = 1250;
+    EPwm8Regs.AQCTLA.bit.CAU = 1;
+    EPwm8Regs.AQCTLA.bit.ZRO = 2;
+    EPwm8Regs.AQCTLB.bit.CBU = 1;
+    EPwm8Regs.AQCTLB.bit.ZRO = 2;
+    EPwm8Regs.TBPHS.bit.TBPHS = 2;
+    GPIO_SetupPinMux(14, GPIO_MUX_CPU1, 1);
+    GPIO_SetupPinMux(15, GPIO_MUX_CPU1, 1);
+
+    // YL$JR$Initial settings for EPWM8Regs
+    EPwm9Regs.TBCTL.bit.CTRMODE = 0;
+    EPwm9Regs.TBCTL.bit.FREE_SOFT = 2;
+    EPwm9Regs.TBCTL.bit.PHSEN = 0;
+    EPwm9Regs.TBCTL.bit.CLKDIV = 0;
+    EPwm9Regs.TBCTR = 0;
+    EPwm9Regs.TBPRD = 2500;
+    EPwm9Regs.CMPA.bit.CMPA = 0;
+    EPwm9Regs.AQCTLA.bit.CAU = 1;
+    EPwm9Regs.AQCTLA.bit.ZRO = 2;
+    EPwm9Regs.TBPHS.bit.TBPHS = 2;
+    GPIO_SetupPinMux(16, GPIO_MUX_CPU1, 5);
+
+    EALLOW; // Below are protected registers
+    GpioCtrlRegs.GPAPUD.bit.GPIO2 = 1; // For EPWM2A
+    GpioCtrlRegs.GPAPUD.bit.GPIO3 = 1; // For EPWM2B
+    GpioCtrlRegs.GPAPUD.bit.GPIO14 = 1; // For EPWM8A
+    GpioCtrlRegs.GPAPUD.bit.GPIO15 = 1; // For EPWM8B
+    GpioCtrlRegs.GPAPUD.bit.GPIO16 = 1; // For EPWM9A
+    GpioCtrlRegs.GPAPUD.bit.GPIO22 = 1; // For EPWM12A
+    EDIS;
 
     // Enable CPU int1 which is connected to CPU-Timer 0, CPU int13
     // which is connected to CPU-Timer 1, and CPU int 14, which is connected
@@ -291,7 +385,7 @@ void main(void)
     while(1)
     {
         if (UARTPrint == 1 ) {
-            serial_printf(&SerialA,"Num Timer2:%ld Num SerialRX: %ld numTimer2calls: %ld sw: %d\r\n",CpuTimer2.InterruptCount,numRXA,numTimer2calls,gsw);
+            serial_printf(&SerialA,"Num Timer2:%ld Num SerialRX: %ld\r\n",CpuTimer2.InterruptCount,numRXA);
             UARTPrint = 0;
         }
     }
@@ -330,7 +424,7 @@ __interrupt void cpu_timer0_isr(void)
     //    }
 
     if ((numTimer0calls%25) == 0) {
-        displayLEDletter(LEDdisplaynum);
+        //displayLEDletter(LEDdisplaynum);
         LEDdisplaynum++;
         if (LEDdisplaynum == 0xFFFF) {  // prevent roll over exception
             LEDdisplaynum = 0;
@@ -339,7 +433,7 @@ __interrupt void cpu_timer0_isr(void)
 
     if ((numTimer0calls%50) == 0) {
         // Blink LaunchPad Red LED
-        //GpioDataRegs.GPBTOGGLE.bit.GPIO34 = 1;
+        GpioDataRegs.GPBTOGGLE.bit.GPIO34 = 1;
     }
 
 
@@ -365,95 +459,33 @@ __interrupt void cpu_timer2_isr(void)
     if ((CpuTimer2.InterruptCount % 10) == 0) {
         UARTPrint = 1;
     }
-    numTimer2calls++;
-    UARTPrint = 1;
+    if (EPwm12Regs.CMPA.bit.CMPA == EPwm12Regs.TBPRD)
+        updown = 0;
+    if (EPwm12Regs.CMPA.bit.CMPA == 0)
+        updown = 1;
 
+    if (updown == 1)
+        EPwm12Regs.CMPA.bit.CMPA++;
+    else
+        EPwm12Regs.CMPA.bit.CMPA--;
 
-    gsw = ReadSwitches();
-    SetLEDRowsOnOff(gsw);
-}
+    //
 
-void SetLEDRowsOnOff(int16_t rows) {
-    // ROW 1 Off Use SET.bit for On and TOGGLE.bit fto toggle On/Off
-    if ((rows & 0x1) == 0x1) {
-        GpioDataRegs.GPASET.bit.GPIO22 = 1;
-        GpioDataRegs.GPESET.bit.GPIO130 = 1;
-        GpioDataRegs.GPBSET.bit.GPIO60 = 1;
-    }else{
-        GpioDataRegs.GPACLEAR.bit.GPIO22 = 1;
-        GpioDataRegs.GPECLEAR.bit.GPIO130 = 1;
-        GpioDataRegs.GPBCLEAR.bit.GPIO60 = 1;
+    if (controleffort > 10){
+        updown2 = 0;
     }
-
-    // ROW 2 Off Use SET.bit for On and TOGGLE.bit fto toggle On/Off
-    if ((rows & 0x2) == 0x2) {
-        GpioDataRegs.GPCSET.bit.GPIO94 = 1;
-        GpioDataRegs.GPESET.bit.GPIO131 = 1;
-        GpioDataRegs.GPBSET.bit.GPIO61 = 1;
-    }else{
-        GpioDataRegs.GPCCLEAR.bit.GPIO94 = 1;
-        GpioDataRegs.GPECLEAR.bit.GPIO131 = 1;
-        GpioDataRegs.GPBCLEAR.bit.GPIO61 = 1;
+    if (controleffort < -10){
+        updown2 = 1;
     }
-    if ((rows & 0x4) == 0x4) {
-        // ROW 3 Off Use SET.bit for On and TOGGLE.bit fto toggle On/Off
-        GpioDataRegs.GPCSET.bit.GPIO95 = 1;
-        GpioDataRegs.GPASET.bit.GPIO25 = 1;
-        GpioDataRegs.GPESET.bit.GPIO157 = 1;
-    }else{
-        GpioDataRegs.GPCCLEAR.bit.GPIO95 = 1;
-        GpioDataRegs.GPACLEAR.bit.GPIO25 = 1;
-        GpioDataRegs.GPECLEAR.bit.GPIO157 = 1;
+    if (updown2 == 1){
+        controleffort += .005;
+        setEPWM2A(controleffort);
+        setEPWM2B(controleffort);
     }
-    if ((rows & 0x8) == 0x8) {
-        // ROW 4 Off Use SET.bit for On and TOGGLE.bit fto toggle On/Off
-        GpioDataRegs.GPDSET.bit.GPIO97 = 1;
-        GpioDataRegs.GPASET.bit.GPIO26 = 1;
-        GpioDataRegs.GPESET.bit.GPIO158 = 1;
-    }else{
-        GpioDataRegs.GPDCLEAR.bit.GPIO97 = 1;
-        GpioDataRegs.GPACLEAR.bit.GPIO26 = 1;
-        GpioDataRegs.GPECLEAR.bit.GPIO158 = 1;
+    else{
+        controleffort -= .005;
+        setEPWM2A(controleffort);
+        setEPWM2B(controleffort);
     }
-    if ((rows & 0x10) == 0x10) {
-        // ROW 5 Off Use SET.bit for On and TOGGLE.bit fto toggle On/Off
-        GpioDataRegs.GPDSET.bit.GPIO111 = 1;
-        GpioDataRegs.GPASET.bit.GPIO27 = 1;
-        GpioDataRegs.GPESET.bit.GPIO159 = 1;
-    }else{
-        GpioDataRegs.GPDCLEAR.bit.GPIO111 = 1;
-        GpioDataRegs.GPACLEAR.bit.GPIO27 = 1;
-        GpioDataRegs.GPECLEAR.bit.GPIO159 = 1;
-
-    }
-}
-
-int16_t ReadSwitches(void) {
-    int16_t sw = 0;
-    if (GpioDataRegs.GPADAT.bit.GPIO4 == 1) {
-        //code that needs to run when input pin GPIO4 is High/3.3V
-    } else {
-        sw = sw|0x1;
-        // code that needs to run when input ping GPIO4 is Low/0V
-    }
-    if (GpioDataRegs.GPADAT.bit.GPIO5 == 1) {
-        //code that needs to run when input pin GPIO4 is High/3.3V
-    } else {
-        sw = sw|0x2;
-        // code that needs to run when input ping GPIO4 is Low/0V
-    }
-    if (GpioDataRegs.GPADAT.bit.GPIO6 == 1) {
-        //code that needs to run when input pin GPIO4 is High/3.3V
-    } else {
-        sw = sw|0x4;
-        // code that needs to run when input ping GPIO4 is Low/0V
-    }
-    if (GpioDataRegs.GPADAT.bit.GPIO7 == 1) {
-        //code that needs to run when input pin GPIO4 is High/3.3V
-    } else {
-        sw = sw|0x8;
-        // code that needs to run when input ping GPIO4 is Low/0V
-    }
-    return sw;
 }
 
