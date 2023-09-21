@@ -16,7 +16,7 @@
 #include "device.h"
 #include "F28379dSerial.h"
 #include "LEDPatterns.h"
-#include "song.h"
+//#include "song.h"
 #include "dsp.h"
 #include "fpu32/fpu_rfft.h"
 
@@ -26,6 +26,81 @@
 // The Launchpad's CPU Frequency set to 200 you should not change this value
 #define LAUNCHPAD_CPU_FREQUENCY 200
 
+#define C4NOTE ((uint16_t)(((50000000/2)/2)/261.63))
+#define D4NOTE ((uint16_t)(((50000000/2)/2)/293.66))
+#define E4NOTE ((uint16_t)(((50000000/2)/2)/329.63))
+#define F4NOTE ((uint16_t)(((50000000/2)/2)/349.23))
+#define G4NOTE ((uint16_t)(((50000000/2)/2)/392.00))
+#define A4NOTE ((uint16_t)(((50000000/2)/2)/440.00))
+#define B4NOTE ((uint16_t)(((50000000/2)/2)/493.88))
+#define C5NOTE ((uint16_t)(((50000000/2)/2)/523.25))
+#define D5NOTE ((uint16_t)(((50000000/2)/2)/587.33))
+#define E5NOTE ((uint16_t)(((50000000/2)/2)/659.25))
+#define F5NOTE ((uint16_t)(((50000000/2)/2)/698.46))
+#define G5NOTE ((uint16_t)(((50000000/2)/2)/783.99))
+#define A5NOTE ((uint16_t)(((50000000/2)/2)/880.00))
+#define B5NOTE ((uint16_t)(((50000000/2)/2)/987.77))
+#define F4SHARPNOTE ((uint16_t)(((50000000/2)/2)/369.99))
+#define G4SHARPNOTE ((uint16_t)(((50000000/2)/2)/415.3))
+#define A4FLATNOTE ((uint16_t)(((50000000/2)/2)/415.3))
+#define C5SHARPNOTE ((uint16_t)(((50000000/2)/2)/554.37))
+#define A5FLATNOTE ((uint16_t)(((50000000/2)/2)/830.61))
+#define OFFNOTE 0
+#define SONG_LENGTH 52
+uint16_t songarray[SONG_LENGTH] = {
+                                   E4NOTE,
+                                   E4NOTE,
+                                   D4NOTE,
+                                   D4NOTE,
+                                   C4NOTE,
+                                   C4NOTE,
+                                   D4NOTE,
+                                   D4NOTE,
+                                   E4NOTE,
+                                   OFFNOTE,
+                                   E4NOTE,
+                                   OFFNOTE,
+                                   E4NOTE,
+                                   OFFNOTE,
+                                   D4NOTE,
+                                   OFFNOTE,
+                                   D4NOTE,
+                                   OFFNOTE,
+                                   D4NOTE,
+                                   OFFNOTE,
+                                   E4NOTE,
+                                   OFFNOTE,
+                                   E4NOTE,
+                                   OFFNOTE,
+                                   E4NOTE,
+                                   OFFNOTE,
+                                   E4NOTE,
+                                   E4NOTE,
+                                   D4NOTE,
+                                   D4NOTE,
+                                   C4NOTE,
+                                   C4NOTE,
+                                   D4NOTE,
+                                   D4NOTE,
+                                   E4NOTE,
+                                   OFFNOTE,
+                                   E4NOTE,
+                                   OFFNOTE,
+                                   E4NOTE,
+                                   OFFNOTE,
+                                   C4NOTE,
+                                   C4NOTE,
+                                   D4NOTE,
+                                   OFFNOTE,
+                                   D4NOTE,
+                                   OFFNOTE,
+                                   E4NOTE,
+                                   E4NOTE,
+                                   D4NOTE,
+                                   D4NOTE,
+                                   C4NOTE,
+                                   C4NOTE,
+};
 
 // Interrupt Service Routines predefinition
 __interrupt void cpu_timer0_isr(void);
@@ -43,7 +118,14 @@ uint16_t LEDdisplaynum = 0;
 int16_t updown = 0;
 int16_t updown2 = 0;
 
+int16_t updown_servo = 0;
+
+
 float controleffort = 0;
+
+float angle = 0;
+
+uint16_t songidx = 0;
 
 float saturate(float input, float saturation_limit)
 {
@@ -72,6 +154,22 @@ void setEPWM2B(float controleffort)
     duty = (saturate(controleffort, 10) + 10)/20;
     EPwm2Regs.CMPB.bit.CMPB = duty*EPwm2Regs.TBPRD;
 }
+
+void setEPWM8A_RCServo(float angle)
+{
+    float duty = 0;
+    duty = 0.04 + 0.08*(saturate(angle, 90) + 90.0)/180.0;
+    EPwm8Regs.CMPA.bit.CMPA = duty*EPwm8Regs.TBPRD;
+}
+
+void setEPWM8B_RCServo(float angle)
+{
+    float duty = 0;
+    duty = 0.04 + 0.08*(saturate(angle, 90) + 90.0)/180.0;
+    EPwm8Regs.CMPB.bit.CMPB = duty*EPwm8Regs.TBPRD;
+}
+
+
 
 void main(void)
 {
@@ -280,7 +378,7 @@ void main(void)
     // Configure CPU-Timer 0, 1, and 2 to interrupt every given period:
     // 200MHz CPU Freq,                       Period (in uSeconds)
     ConfigCpuTimer(&CpuTimer0, LAUNCHPAD_CPU_FREQUENCY, 10000);
-    ConfigCpuTimer(&CpuTimer1, LAUNCHPAD_CPU_FREQUENCY, 20000);
+    ConfigCpuTimer(&CpuTimer1, LAUNCHPAD_CPU_FREQUENCY, 125000);
     ConfigCpuTimer(&CpuTimer2, LAUNCHPAD_CPU_FREQUENCY, 1000);
 
     // Enable CpuTimer Interrupt bit TIE
@@ -323,11 +421,11 @@ void main(void)
     EPwm8Regs.TBCTL.bit.CTRMODE = 0;
     EPwm8Regs.TBCTL.bit.FREE_SOFT = 2;
     EPwm8Regs.TBCTL.bit.PHSEN = 0;
-    EPwm8Regs.TBCTL.bit.CLKDIV = 0;
+    EPwm8Regs.TBCTL.bit.CLKDIV = 4;
     EPwm8Regs.TBCTR = 0;
-    EPwm8Regs.TBPRD = 2500;
-    EPwm8Regs.CMPA.bit.CMPA = 0;
-    EPwm8Regs.CMPB.bit.CMPB = 1250;
+    EPwm8Regs.TBPRD = 62500;
+    EPwm8Regs.CMPA.bit.CMPA = 5000;
+    EPwm8Regs.CMPB.bit.CMPB = 5000;
     EPwm8Regs.AQCTLA.bit.CAU = 1;
     EPwm8Regs.AQCTLA.bit.ZRO = 2;
     EPwm8Regs.AQCTLB.bit.CBU = 1;
@@ -340,12 +438,12 @@ void main(void)
     EPwm9Regs.TBCTL.bit.CTRMODE = 0;
     EPwm9Regs.TBCTL.bit.FREE_SOFT = 2;
     EPwm9Regs.TBCTL.bit.PHSEN = 0;
-    EPwm9Regs.TBCTL.bit.CLKDIV = 0;
+    EPwm9Regs.TBCTL.bit.CLKDIV = 1;
     EPwm9Regs.TBCTR = 0;
     EPwm9Regs.TBPRD = 2500;
-    EPwm9Regs.CMPA.bit.CMPA = 0;
-    EPwm9Regs.AQCTLA.bit.CAU = 1;
-    EPwm9Regs.AQCTLA.bit.ZRO = 2;
+    //EPwm9Regs.CMPA.bit.CMPA = 0;
+    EPwm9Regs.AQCTLA.bit.CAU = 0;
+    EPwm9Regs.AQCTLA.bit.ZRO = 3;
     EPwm9Regs.TBPHS.bit.TBPHS = 2;
     GPIO_SetupPinMux(16, GPIO_MUX_CPU1, 5);
 
@@ -373,7 +471,7 @@ void main(void)
     // Enable SWI in the PIE: Group 12 interrupt 9
     PieCtrlRegs.PIEIER12.bit.INTx9 = 1;
 
-    init_serialSCIB(&SerialB,115200);
+    //init_serialSCIB(&SerialB,115200);
     init_serialSCIC(&SerialC,115200);
     init_serialSCID(&SerialD,115200);
     // Enable global Interrupts and higher priority real-time debug events
@@ -444,7 +542,12 @@ __interrupt void cpu_timer0_isr(void)
 // cpu_timer1_isr - CPU Timer1 ISR
 __interrupt void cpu_timer1_isr(void)
 {
-
+    EPwm9Regs.TBPRD = songarray[songidx];
+    songidx++;
+    if (songidx > SONG_LENGTH){
+        GPIO_SetupPinMux(16, GPIO_MUX_CPU1, 0);
+        GpioDataRegs.GPASET.bit.GPIO16 = 0;
+    }
     CpuTimer1.InterruptCount++;
 }
 
@@ -487,5 +590,23 @@ __interrupt void cpu_timer2_isr(void)
         setEPWM2A(controleffort);
         setEPWM2B(controleffort);
     }
+
+    if (angle > 90){
+        updown_servo = 0;
+    }
+    if (angle < -90){
+        updown_servo = 1;
+    }
+    if (updown_servo == 1){
+        angle += .05;
+        setEPWM8A_RCServo(angle);
+        setEPWM8B_RCServo(angle);
+    }
+    else{
+        angle -= .05;
+        setEPWM8A_RCServo(angle);
+        setEPWM8B_RCServo(angle);
+    }
+
 }
 
