@@ -35,6 +35,7 @@ __interrupt void SWI_isr(void);
 
 //adcd1 pie interrupt
 __interrupt void ADCD_ISR (void);
+__interrupt void ADCA_ISR (void);
 
 // Count variables
 uint32_t numTimer0calls = 0;
@@ -46,9 +47,17 @@ uint16_t LEDdisplaynum = 0;
 int16_t adcd0result = 0;
 int16_t adcd1result = 0;
 
-float ADCIND0_volt = 0;
+int16_t adca2result = 0;
+int16_t adca3result = 0;
 
-uint16_t ADCD_count = 0;
+float ADCIND0_volt = 0;
+float ADCINA2_volt = 0;
+float ADCINA3_volt = 0;
+
+uint16_t ADCA_count = 0;
+
+float filteredVol2 = 0;
+float filteredVol3 = 0;
 
 //This function sets DACA to the voltage between 0V and 3V passed to this function.
 //If outside 0V to 3V the output is saturated at 0V to 3V
@@ -268,7 +277,9 @@ void main(void)
 
     PieVectTable.EMIF_ERROR_INT = &SWI_isr;
 
-    PieVectTable.ADCD1_INT = &ADCD_ISR;
+    //PieVectTable.ADCD1_INT = &ADCD_ISR;
+    PieVectTable.ADCA1_INT = &ADCA_ISR;
+
     EDIS;    // This is needed to disable write to EALLOW protected registers
 
 
@@ -329,15 +340,15 @@ void main(void)
     //Select the channels to convert and end of conversion flag
     //Many statements commented out, To be used when using ADCA or ADCB
     //ADCA
-    //AdcaRegs.ADCSOC0CTL.bit.CHSEL = ???; //SOC0 will convert Channel you choose Does not have to be A0
-    //AdcaRegs.ADCSOC0CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
-    //AdcaRegs.ADCSOC0CTL.bit.TRIGSEL = ???;// EPWM5 ADCSOCA or another trigger you choose will	trigger SOC0
-    //AdcaRegs.ADCSOC1CTL.bit.CHSEL = ???; //SOC1 will convert Channel you choose Does not have to	be A1
-    //AdcaRegs.ADCSOC1CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
-    //AdcaRegs.ADCSOC1CTL.bit.TRIGSEL = ???;// EPWM5 ADCSOCA or another trigger you choose will	trigger SOC1
-    //AdcaRegs.ADCINTSEL1N2.bit.INT1SEL = ???; //set to last SOC that is converted and it will set INT1 flag ADCA1
-    //AdcaRegs.ADCINTSEL1N2.bit.INT1E = 1; //enable INT1 flag
-    //AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //make sure INT1 flag is cleared
+    AdcaRegs.ADCSOC0CTL.bit.CHSEL = 2; //$YL&JR SOC2 will convert Channel you choose Does not have to be A0
+    AdcaRegs.ADCSOC0CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
+    AdcaRegs.ADCSOC0CTL.bit.TRIGSEL = 13;// EPWM5 ADCSOCA or another trigger you choose will	trigger SOC0
+    AdcaRegs.ADCSOC1CTL.bit.CHSEL = 3; //$YL&JR SOC3 will convert Channel you choose Does not have to	be A1
+    AdcaRegs.ADCSOC1CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
+    AdcaRegs.ADCSOC1CTL.bit.TRIGSEL = 13;// EPWM5 ADCSOCA or another trigger you choose will	trigger SOC1
+    AdcaRegs.ADCINTSEL1N2.bit.INT1SEL = 1; //set to last SOC that is converted and it will set INT1 flag ADCA1
+    AdcaRegs.ADCINTSEL1N2.bit.INT1E = 1; //enable INT1 flag
+    AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //make sure INT1 flag is cleared
     //ADCB
     //AdcbRegs.ADCSOC0CTL.bit.CHSEL = ???; //SOC0 will convert Channel you choose Does not have to be B0
     //AdcbRegs.ADCSOC0CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
@@ -355,21 +366,21 @@ void main(void)
     //AdcbRegs.ADCINTSEL1N2.bit.INT1E = 1; //enable INT1 flag
     //AdcbRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //make sure INT1 flag is cleared
     //ADCD
-    AdcdRegs.ADCSOC0CTL.bit.CHSEL = 0; // set SOC0 to convert pin D0
-    AdcdRegs.ADCSOC0CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
-    AdcdRegs.ADCSOC0CTL.bit.TRIGSEL = 13; // EPWM5 ADCSOCA will trigger SOC0
-    AdcdRegs.ADCSOC1CTL.bit.CHSEL = 1; //set SOC1 to convert pin D1
-    AdcdRegs.ADCSOC1CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
-    AdcdRegs.ADCSOC1CTL.bit.TRIGSEL = 13; // EPWM5 ADCSOCA will trigger SOC1
+    //AdcdRegs.ADCSOC0CTL.bit.CHSEL = 0; // set SOC0 to convert pin D0
+    //AdcdRegs.ADCSOC0CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
+    //AdcdRegs.ADCSOC0CTL.bit.TRIGSEL = 13; // EPWM5 ADCSOCA will trigger SOC0
+    //AdcdRegs.ADCSOC1CTL.bit.CHSEL = 1; //set SOC1 to convert pin D1
+    //AdcdRegs.ADCSOC1CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
+    //AdcdRegs.ADCSOC1CTL.bit.TRIGSEL = 13; // EPWM5 ADCSOCA will trigger SOC1
     //AdcdRegs.ADCSOC2CTL.bit.CHSEL = ???; //set SOC2 to convert pin D2
     //AdcdRegs.ADCSOC2CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
     //AdcdRegs.ADCSOC2CTL.bit.TRIGSEL = ???; // EPWM5 ADCSOCA will trigger SOC2
     //AdcdRegs.ADCSOC3CTL.bit.CHSEL = ???; //set SOC3 to convert pin D3
     //AdcdRegs.ADCSOC3CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
     //AdcdRegs.ADCSOC3CTL.bit.TRIGSEL = ???; // EPWM5 ADCSOCA will trigger SOC3
-    AdcdRegs.ADCINTSEL1N2.bit.INT1SEL = 1; //set to SOC1, the last converted, and it will set INT1 flag ADCD1
-    AdcdRegs.ADCINTSEL1N2.bit.INT1E = 1; //enable INT1 flag
-    AdcdRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //make sure INT1 flag is cleared
+    //AdcdRegs.ADCINTSEL1N2.bit.INT1SEL = 1; //set to SOC1, the last converted, and it will set INT1 flag ADCD1
+    //AdcdRegs.ADCINTSEL1N2.bit.INT1E = 1; //enable INT1 flag
+    //AdcdRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //make sure INT1 flag is cleared
     EDIS;
 
     // Enable DACA and DACB outputs
@@ -396,7 +407,10 @@ void main(void)
     PieCtrlRegs.PIEIER1.bit.INTx7 = 1;
 
     // Enable TINT0 in the PIE: Group 1 interrupt 6
-    PieCtrlRegs.PIEIER1.bit.INTx6 = 1;
+    //PieCtrlRegs.PIEIER1.bit.INTx6 = 1;
+
+    // Enable TINT0 in the PIE: Group 1 interrupt 1
+    PieCtrlRegs.PIEIER1.bit.INTx1 = 1;
 
     // Enable SWI in the PIE: Group 12 interrupt 9
     PieCtrlRegs.PIEIER12.bit.INTx9 = 1;
@@ -413,7 +427,7 @@ void main(void)
     while(1)
     {
         if (UARTPrint == 1 ) {
-            serial_printf(&SerialA,"Voltage: %f\r\n",ADCIND0_volt);
+            serial_printf(&SerialA,"ADCINA2Voltage: %f ADCINA3Voltage: %f \r\n",filteredVol2, filteredVol3);
             UARTPrint = 0;
         }
     }
@@ -492,7 +506,9 @@ __interrupt void cpu_timer2_isr(void)
 //xk is the current ADC reading, xk_1 is the ADC reading one millisecond ago, xk_2 two milliseconds ago, etc
 
 int order = 21;
-float xk[22];
+float xk2[22];
+float xk3[22];
+
 //yk is the filtered value
 
 //b is the filter coefficients
@@ -520,36 +536,80 @@ float b[22]={   -2.3890045153263611e-03,
                 -2.3890045153263611e-03}; // 0.2 is 1/5th therefore a 5 point average
 
 //adcd1 pie interrupt
-__interrupt void ADCD_ISR (void) {
-    adcd0result = AdcdResultRegs.ADCRESULT0;
-    adcd1result = AdcdResultRegs.ADCRESULT1;
+//__interrupt void ADCD_ISR (void) {
+//    adcd0result = AdcdResultRegs.ADCRESULT0;
+//    adcd1result = AdcdResultRegs.ADCRESULT1;
     // Here covert ADCIND0, ADCIND1 to volts
-    ADCIND0_volt = adcd0result*3.0/4095.0;
+//    ADCIND0_volt = adcd0result*3.0/4095.0;
+//
+//    float yk = 0;
+//    int i;
+//    for (i = 0; i < order; i++)
+//    {
+//        xk[i] = xk[i+1];
+//    }
+//    xk[order] = ADCIND0_volt;
+//
+//    for (i = 0; i < order + 1; i++)
+//    {
+//        yk += xk[i]*b[i];
+//    }
+//
+//    //Save past states before exiting from the function so that next sample they are the older state
+//    // Here write yk to DACA channel
+//    setDACA(yk);
+//
+//    // Print ADCIND0 and ADCIND1’s voltage value to TeraTerm every 100ms
+//    ADCD_count++;
+//
+//    if ((ADCD_count % 100) == 0) {
+//        UARTPrint = 1;
+//    }
+//
+//    AdcdRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //clear interrupt flag
+//    PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
+//}
 
-    float yk = 0;
+__interrupt void ADCA_ISR (void) {
+    adca2result = AdcaResultRegs.ADCRESULT0;
+    adca3result = AdcaResultRegs.ADCRESULT1;
+
+    // Here covert ADCIND0, ADCIND1 to volts
+    ADCINA2_volt = adca2result*3.0/4095.0;
+    ADCINA3_volt = adca3result*3.0/4095.0;
+
+    float yk2 = 0;
+    float yk3 = 0;
+
     int i;
     for (i = 0; i < order; i++)
     {
-        xk[i] = xk[i+1];
+        xk2[i] = xk2[i+1];
+        xk3[i] = xk3[i+1];
+
     }
-    xk[order] = ADCIND0_volt;
+    xk2[order] = ADCINA2_volt;
+    xk3[order] = ADCINA3_volt;
 
     for (i = 0; i < order + 1; i++)
     {
-        yk += xk[i]*b[i];
+        yk2 += xk2[i]*b[i];
+        yk3 += xk3[i]*b[i];
     }
 
     //Save past states before exiting from the function so that next sample they are the older state
     // Here write yk to DACA channel
-    setDACA(yk);
+    //setDACA(yk);
 
     // Print ADCIND0 and ADCIND1’s voltage value to TeraTerm every 100ms
-    ADCD_count++;
+    ADCA_count++;
 
-    if ((ADCD_count % 100) == 0) {
+    if ((ADCA_count % 100) == 0) {
         UARTPrint = 1;
+        filteredVol2 = yk2;
+        filteredVol3 = yk3;
     }
 
-    AdcdRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //clear interrupt flag
+    AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //clear interrupt flag
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
 }
