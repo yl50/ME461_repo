@@ -2,7 +2,7 @@
 // FILE:   LABstarter_main.c
 //
 // TITLE:  Lab Starter
-//#############################################################################
+// initial for commentary: YL$JR$ #############################################################################
 
 // Included Files
 #include <stdio.h>
@@ -25,7 +25,7 @@
 #define HALFPI      1.5707963267948966192313216916398
 // The Launchpad's CPU Frequency set to 200 you should not change this value
 #define LAUNCHPAD_CPU_FREQUENCY 200
-
+//YL$JR$ Mary Had a Little Lamb for Exercise 4
 #define C4NOTE ((uint16_t)(((50000000/2)/2)/261.63))
 #define D4NOTE ((uint16_t)(((50000000/2)/2)/293.66))
 #define E4NOTE ((uint16_t)(((50000000/2)/2)/329.63))
@@ -115,18 +115,19 @@ extern uint32_t numRXA;
 uint16_t UARTPrint = 0;
 uint16_t LEDdisplaynum = 0;
 
-int16_t updown = 0;
-int16_t updown2 = 0;
+int16_t updown = 0; //YL$JR$ create a global variable for counter for LED dimming
+int16_t updown2 = 0;//YL$JR$ create a global variable for counter for controleffort
 
-int16_t updown_servo = 0;
+int16_t updown_servo = 0;//YL$JR$ create a global variable for counter for servo control
 
 
-float controleffort = 0;
+float controleffort = 0;//YL$JR$ create a global variable for counter for controleffort
 
-float angle = 0;
+float angle = 0;//YL$JR$ create a global variable for counter for servo control
 
-uint16_t songidx = 0;
+uint16_t songidx = 0;//YL$JR$ create a global variable to count song index
 
+//YL$JR$ Use a saturate function from HW
 float saturate(float input, float saturation_limit)
 {
     float output = 0;
@@ -140,7 +141,7 @@ float saturate(float input, float saturation_limit)
     return output;
 }
 
-
+//YL$JR$ Create two functions, setEPWM2A and setEPWM2B, that will help get ready for controlling the speed and angle of the motor
 void setEPWM2A(float controleffort)
 {
     float duty = 0;
@@ -155,6 +156,7 @@ void setEPWM2B(float controleffort)
     EPwm2Regs.CMPB.bit.CMPB = duty*EPwm2Regs.TBPRD;
 }
 
+//YL$JR$ create two functions void setEPWM8A_RCServo(float angle) and void setEPWM8B_RCServo(float angle).
 void setEPWM8A_RCServo(float angle)
 {
     float duty = 0;
@@ -542,6 +544,7 @@ __interrupt void cpu_timer0_isr(void)
 // cpu_timer1_isr - CPU Timer1 ISR
 __interrupt void cpu_timer1_isr(void)
 {
+    //LY$JR$ Whenever cpu_timer1_isr function is called, the buzzer outputs one note along the song array above and increases songidx by 1
     EPwm9Regs.TBPRD = songarray[songidx];
     songidx++;
     if (songidx > SONG_LENGTH){
@@ -572,7 +575,7 @@ __interrupt void cpu_timer2_isr(void)
     else
         EPwm12Regs.CMPA.bit.CMPA--;
 
-    //
+    //YL$JR$ To increase and decrease controleffort by 0.005 between 10 and -10 in the same way that we blinked LaunchPad LED
 
     if (controleffort > 10){
         updown2 = 0;
@@ -591,6 +594,7 @@ __interrupt void cpu_timer2_isr(void)
         setEPWM2B(controleffort);
     }
 
+    //YL$JR$ instead of controleffort, the angle of servo motor is increased and decreased between +90 and -90 degrees
     if (angle > 90){
         updown_servo = 0;
     }

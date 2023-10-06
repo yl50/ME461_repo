@@ -2,6 +2,7 @@
 // FILE:   LABstarter_main.c
 //
 // TITLE:  Lab Starter
+//Comment: $YL&JR
 //#############################################################################
 
 // Included Files
@@ -304,7 +305,7 @@ void main(void)
     EPwm5Regs.TBPHS.bit.TBPHS = 0x0000; // Phase is 0
     EPwm5Regs.TBCTL.bit.PHSEN = 0; // Disable phase loading
     EPwm5Regs.TBCTL.bit.CLKDIV = 0; // divide by 1 50Mhz Clock
-    EPwm5Regs.TBPRD = 12500; // Set Period to 0.25ms sample. Input clock is 50MHz.
+    EPwm5Regs.TBPRD = 12500; // $YL&JR Set Period to 0.25ms sample. Input clock is 50MHz.
     // Notice here that we are not setting CMPA or CMPB because we are not using the PWM signal
     EPwm5Regs.ETSEL.bit.SOCAEN = 1; //enable SOCA
     EPwm5Regs.TBCTL.bit.CTRMODE = 0; //unfreeze, and enter up count mode
@@ -540,6 +541,9 @@ float b[32]={   -6.3046914864397922e-04,
 
 //adcb1 pie interrupt
 __interrupt void ADCB_ISR (void) {
+
+    GpioDataRegs.GPBTOGGLE.bit.GPIO52 = 1; //$YL&JR SET GPIO52  To time the processing of your ADCB
+
     adcb4result = AdcbResultRegs.ADCRESULT0;
 
     // Here covert ADCIND0, ADCIND1 to volts
@@ -571,4 +575,5 @@ __interrupt void ADCB_ISR (void) {
 
     AdcbRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //clear interrupt flag
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
+    GpioDataRegs.GPBTOGGLE.bit.GPIO52 = 0;//$YL&JR Clear GPIO52  To time the processing of your ADCB
 }
