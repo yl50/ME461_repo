@@ -235,6 +235,11 @@ void main(void)
     GPIO_SetupPinMux(8, GPIO_MUX_CPU1, 0);
     GPIO_SetupPinOptions(8, GPIO_INPUT, GPIO_PULLUP);
 
+    //$YL&JR how much time it takes for the F28379D processor to run the FIR filter equations
+    GPIO_SetupPinMux(52, GPIO_MUX_CPU1, 0);
+    GPIO_SetupPinOptions(52, GPIO_OUTPUT, GPIO_PUSHPULL);
+    GpioDataRegs.GPBCLEAR.bit.GPIO60 = 1;
+
 
     // Clear all interrupts and initialize PIE vector table:
     // Disable CPU interrupts
@@ -537,12 +542,12 @@ float b[32]={   -6.3046914864397922e-04,
                 -1.5874939943956356e-03,
                 -2.5619416124584822e-03,
                 -1.8185681242784432e-03,
-                -6.3046914864397922e-04}; // 0.2 is 1/5th therefore a 5 point average
+                -6.3046914864397922e-04}; // $YL&JR b = fir1(31,.25)
 
 //adcb1 pie interrupt
 __interrupt void ADCB_ISR (void) {
 
-    GpioDataRegs.GPBTOGGLE.bit.GPIO52 = 1; //$YL&JR SET GPIO52  To time the processing of your ADCB
+    GpioDataRegs.GPBSET.bit.GPIO52 = 1; //$YL&JR SET GPIO52  To time the processing of your ADCB
 
     adcb4result = AdcbResultRegs.ADCRESULT0;
 
@@ -575,5 +580,5 @@ __interrupt void ADCB_ISR (void) {
 
     AdcbRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //clear interrupt flag
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
-    GpioDataRegs.GPBTOGGLE.bit.GPIO52 = 0;//$YL&JR Clear GPIO52  To time the processing of your ADCB
+    GpioDataRegs.GPBCLEAR.bit.GPIO52 = 1;//$YL&JR Clear GPIO52  To time the processing of your ADCB
 }
