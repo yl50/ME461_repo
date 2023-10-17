@@ -42,6 +42,30 @@ extern uint32_t numRXA;
 uint16_t UARTPrint = 0;
 uint16_t LEDdisplaynum = 0;
 
+int16_t updown1 = 0; //YL$JR$ create a global variable for counter for PWM1
+int16_t updown2 = 0; //YL$JR$ create a global variable for counter for PWM2
+int16_t PWM1_ref = 0;//YL$JR$ create a global variable for counter for PWM1_ref
+int16_t PWM2_ref = 0;//YL$JR$ create a global variable for counter for PWM2_ref
+
+int16_t spivalue0 = 0;
+int16_t spivalue1 = 0;
+int16_t spivalue2 = 0;
+float ADC1_volt = 0;
+float ADC2_volt = 0;
+
+//YL$JR$ Use a saturate function from HW
+int16_t saturate(int16_t input, int16_t saturation_limit_L, int16_t saturation_limit_H)
+{
+    float output = 0;
+    if (input < saturation_limit_L) {
+        output = saturation_limit_L;
+    } else if (input > saturation_limit_H) {
+        output = saturation_limit_H;
+    } else {
+        output = input;
+    }
+    return output;
+}
 
 void main(void)
 {
@@ -251,7 +275,7 @@ void main(void)
 
     // Configure CPU-Timer 0, 1, and 2 to interrupt every given period:
     // 200MHz CPU Freq,                       Period (in uSeconds)
-    ConfigCpuTimer(&CpuTimer0, LAUNCHPAD_CPU_FREQUENCY, 10000);
+    ConfigCpuTimer(&CpuTimer0, LAUNCHPAD_CPU_FREQUENCY, 20000);
     ConfigCpuTimer(&CpuTimer1, LAUNCHPAD_CPU_FREQUENCY, 20000);
     ConfigCpuTimer(&CpuTimer2, LAUNCHPAD_CPU_FREQUENCY, 40000);
 
@@ -341,7 +365,7 @@ void main(void)
     while(1)
     {
         if (UARTPrint == 1 ) {
-			serial_printf(&SerialA,"Num Timer2:%ld Num SerialRX: %ld\r\n",CpuTimer2.InterruptCount,numRXA);
+			serial_printf(&SerialA,"ADC1 Voltage: %f V ADC2 Voltage: %f V\r\n",ADC1_volt,ADC2_volt);
             UARTPrint = 0;
         }
     }
@@ -398,10 +422,45 @@ __interrupt void cpu_timer0_isr(void)
 
     //Clear GPIO9 Low to act as a Slave Select. Right now, just to scope. Later to select DAN28027 chip
     GpioDataRegs.GPACLEAR.bit.GPIO9 = 1;
-    SpibRegs.SPIFFRX.bit.RXFFIL = 2; // Issue the SPIB_RX_INT when two values are in the RX FIFO
-    SpibRegs.SPITXBUF = 0x4A3B; // 0x4A3B and 0xB517 have no special meaning. Wanted to send
-    SpibRegs.SPITXBUF = 0xB517; // something so you can see the pattern on the Oscilloscope
+    SpibRegs.SPIFFRX.bit.RXFFIL = 3; // Issue the SPIB_RX_INT when 3 values are in the RX FIFO
+    SpibRegs.SPITXBUF = 0x00DA; // $YL 0x00DA must be sent as the first 16 bit value. During this transmission of 0x00DA, the DAN28027 sends nothing important back to the Master so this 16 bit value can be discarded once read on the Master’s end.
 
+    //YL$JR$ To increase and decrease PWM1_ref by 10 between 0 and 3000 in the same way that we blinked LaunchPad LED
+
+    if (PWM1_ref >= 3000){
+        updown1 = 0;
+    }
+    if (PWM1_ref <= 0){
+        updown1 = 1;
+    }
+    if (updown1 == 1){
+        PWM1_ref += 10;
+        PWM1_ref = saturate(PWM1_ref, 0, 3000);
+        SpibRegs.SPITXBUF = PWM1_ref;
+    }
+    else{
+        PWM1_ref -= 10;
+        PWM1_ref = saturate(PWM1_ref, 0, 3000);
+        SpibRegs.SPITXBUF = PWM1_ref;
+    }
+
+    //YL$JR$ To increase and decrease PWM2_ref by 10 between 0 and 3000 in the same way that we blinked LaunchPad LED
+    if (PWM2_ref >= 3000){
+        updown2 = 0;
+    }
+    if (PWM2_ref <= 0){
+        updown2 = 1;
+    }
+    if (updown2 == 1){
+        PWM2_ref += 10;
+        PWM2_ref = saturate(PWM2_ref, 0, 3000);
+        SpibRegs.SPITXBUF = PWM2_ref;
+    }
+    else{
+        PWM2_ref -= 10;
+        PWM2_ref = saturate(PWM2_ref, 0, 3000);
+        SpibRegs.SPITXBUF = PWM2_ref;
+    }
 }
 
 // cpu_timer1_isr - CPU Timer1 ISR
@@ -419,16 +478,19 @@ __interrupt void cpu_timer2_isr(void)
 
     CpuTimer2.InterruptCount++;
 	
-	if ((CpuTimer2.InterruptCount % 10) == 0) {
+	if ((CpuTimer2.InterruptCount % 5) == 0) {
 		UARTPrint = 1;
 	}
 }
 
-int16_t spivalue1 = 0;
-int16_t spivalue2 = 0;
+
 __interrupt void SPIB_isr(void) {
-    spivalue1 = SpibRegs.SPIRXBUF; // Read first 16-bit value off RX FIFO. Probably is zero since no chip
-    spivalue2 = SpibRegs.SPIRXBUF; // Read second 16-bit value off RX FIFO. Again probably zero
+    spivalue0 = SpibRegs.SPIRXBUF; // $YL Read first 16-bit value off RX FIFO. Probably is zero since no chip
+    spivalue1 = SpibRegs.SPIRXBUF; // $YL Read second 16-bit value off RX FIFO. Probably is zero since no chip
+    spivalue2 = SpibRegs.SPIRXBUF; // $YL Read third 16-bit value off RX FIFO. Probably is zero since no chip
+    ADC1_volt = spivalue1*3.3/4095.0;
+    ADC2_volt = spivalue2*3.3/4095.0;
+
     GpioDataRegs.GPASET.bit.GPIO9 = 1; // Set GPIO9 high to end Slave Select. Now Scope. Later to deselect DAN28027
     // Later when actually communicating with the DAN28027 do something with the data. Now do nothing.
     SpibRegs.SPIFFRX.bit.RXFFOVFCLR = 1; // Clear Overflow flag just in case of an overflow
