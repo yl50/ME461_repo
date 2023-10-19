@@ -277,7 +277,7 @@ void main(void)
     // 200MHz CPU Freq,                       Period (in uSeconds)
     ConfigCpuTimer(&CpuTimer0, LAUNCHPAD_CPU_FREQUENCY, 20000);
     ConfigCpuTimer(&CpuTimer1, LAUNCHPAD_CPU_FREQUENCY, 20000);
-    ConfigCpuTimer(&CpuTimer2, LAUNCHPAD_CPU_FREQUENCY, 40000);
+    ConfigCpuTimer(&CpuTimer2, LAUNCHPAD_CPU_FREQUENCY, 20000);
 
     // Enable CpuTimer Interrupt bit TIE
     CpuTimer0Regs.TCR.all = 0x4000;
@@ -365,7 +365,7 @@ void main(void)
     while(1)
     {
         if (UARTPrint == 1 ) {
-			serial_printf(&SerialA,"ADC1 Voltage: %f V ADC2 Voltage: %f V\r\n",ADC1_volt,ADC2_volt);
+			serial_printf(&SerialA,"ADC1 Voltage: %.3f V ADC2 Voltage: %.3f V\r\n",ADC1_volt,ADC2_volt);
             UARTPrint = 0;
         }
     }
