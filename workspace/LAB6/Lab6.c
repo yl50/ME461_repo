@@ -83,14 +83,15 @@ float VRightK = 0;
 float uLeft = 5.0;
 float uRight = 5.0;
 
-float LeftVref = 0;
-float RightVref = 0;
+float Vref = 0;
+
+float turn = 0;
 
 float e_K_left = 0;
 float e_K_right = 0;
 float e_K_1_left = 0;
 float e_K_1_right = 0;
-
+float e_turn = 0;
 float I_K_left = 0;
 float I_K_right = 0;
 float I_K_1_left = 0;
@@ -103,6 +104,41 @@ float Kp_left = 3;
 float Kp_right = 3;
 float Ki_left = 5;
 float Ki_right = 5;
+float KP_turn = 3;
+
+float printLV3 = 0;
+float printLV4 = 0;
+float printLV5 = 0;
+float printLV6 = 0;
+float printLV7 = 0;
+float printLV8 = 0;
+float x = 0;
+float y = 0;
+float bearing = 0;
+
+extern uint16_t NewLVData;
+extern float fromLVvalues[LVNUM_TOFROM_FLOATS];
+extern LVSendFloats_t DataToLabView;
+extern char LVsenddata[LVNUM_TOFROM_FLOATS*4+2];
+extern uint16_t newLinuxCommands;
+extern float LinuxCommands[CMDNUM_FROM_FLOATS];
+
+float W_R = 0.56759;
+float R_Wh = 0.19460;
+
+float x_dot = 0;
+float x_dot_K_1 = 0;
+
+float y_dot = 0;
+float y_dot_K_1 = 0;
+
+
+float angle_avg = 0;
+float angle_avg_dot = 0;
+float RightWheel_K_1 = 0;
+float LeftWheel_K_1 = 0;
+
+float angle_avg_K_1 = 0;
 
 //YL$JR$ Use a saturate function from HW
 float saturate(float input, float saturation_limit_L, float saturation_limit_H)
@@ -596,9 +632,8 @@ __interrupt void cpu_timer1_isr(void)
     Kp_right = 5;
     Ki_left = 25;
     Ki_right = 25;
+    KP_turn = 3;
 
-    LeftVref = -1.0;
-    RightVref = -1.0;
 
     LeftWheel = readEncLeft();
     RightWheel = readEncRight();
@@ -609,12 +644,17 @@ __interrupt void cpu_timer1_isr(void)
     VLeftK = (PosLeft_K - PosLeft_K_1)/0.004;
     VRightK = (PosRight_K - PosRight_K_1)/0.004;
 
-    e_K_left = LeftVref - VLeftK;
-    e_K_right = RightVref - VRightK;
+    e_turn = turn + (VLeftK - VRightK);
+
+    e_K_left = Vref - VLeftK - KP_turn*e_turn;
+    e_K_right = Vref - VRightK + KP_turn*e_turn;
     I_K_left = I_K_1_left + 0.004*(e_K_left + e_K_1_left)*0.5;
     I_K_right = I_K_1_right + 0.004*(e_K_right + e_K_1_right)*0.5;
     u_K_left = Kp_left*e_K_left + Ki_left*I_K_left;
     u_K_right = Kp_right*e_K_right + Ki_right*I_K_right;
+
+
+
 
     if (fabs(u_K_left) > 10){
         I_K_left = I_K_1_left;
@@ -626,15 +666,64 @@ __interrupt void cpu_timer1_isr(void)
     uLeft = u_K_left;
     uRight = u_K_right;
 
+
     setEPWM2A(uRight);
     setEPWM2B(-uLeft);
 
+    bearing = R_Wh/W_R*(RightWheel - LeftWheel);
+
+    angle_avg = 0.5*(RightWheel + LeftWheel);
+    angle_avg_dot = (angle_avg - angle_avg_K_1)/0.004;
+    x_dot = R_Wh*angle_avg_dot*cos(bearing);
+    y_dot = R_Wh*angle_avg_dot*sin(bearing);
+
+    x = x + 0.5*(x_dot + x_dot_K_1)*0.004;
+    y = y + 0.5*(y_dot + y_dot_K_1)*0.004;
+
+    //save values at K as previous values at K-1
     PosLeft_K_1 = PosLeft_K;
     PosRight_K_1 = PosRight_K;
     e_K_1_left = e_K_left;
     e_K_1_right = e_K_right;
     I_K_1_left = I_K_left;
     I_K_1_right = I_K_right;
+    LeftWheel_K_1 = LeftWheel;
+    RightWheel_K_1 = RightWheel;
+    x_dot_K_1 = x_dot;
+    y_dot_K_1 = y_dot;
+    angle_avg_K_1 = angle_avg;
+
+    if (NewLVData == 1) {
+        NewLVData = 0;
+        Vref = fromLVvalues[0];
+        turn = fromLVvalues[1];
+        printLV3 = fromLVvalues[2];
+        printLV4 = fromLVvalues[3];
+        printLV5 = fromLVvalues[4];
+        printLV6 = fromLVvalues[5];
+        printLV7 = fromLVvalues[6];
+        printLV8 = fromLVvalues[7];
+    }
+    if((CpuTimer1.InterruptCount%62) == 0) { // change to the counter variable of you selected 4ms. timer
+        DataToLabView.floatData[0] = x;
+        DataToLabView.floatData[1] = y;
+        DataToLabView.floatData[2] = bearing;
+        DataToLabView.floatData[3] = 2.0*((float)numTimer0calls)*.001;
+        DataToLabView.floatData[4] = 3.0*((float)numTimer0calls)*.001;
+        DataToLabView.floatData[5] = (float)numTimer0calls;
+        DataToLabView.floatData[6] = (float)numTimer0calls*4.0;
+        DataToLabView.floatData[7] = (float)numTimer0calls*5.0;
+        LVsenddata[0] = '*'; // header for LVdata
+        LVsenddata[1] = '$';
+        for (int i=0;i<LVNUM_TOFROM_FLOATS*4;i++) {
+            if (i%2==0) {
+                LVsenddata[i+2] = DataToLabView.rawData[i/2] & 0xFF;
+            } else {
+                LVsenddata[i+2] = (DataToLabView.rawData[i/2]>>8) & 0xFF;
+            }
+        }
+        serial_sendSCID(&SerialD, LVsenddata, 4*LVNUM_TOFROM_FLOATS + 2);
+    }
 
     CpuTimer1.InterruptCount++;
 }
