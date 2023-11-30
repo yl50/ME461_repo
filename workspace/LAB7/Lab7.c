@@ -106,6 +106,9 @@ float VRightK = 0;
 float vel_Left_K = 0;
 float vel_Right_K = 0;
 
+float vel_Left_K_1 = 0;
+float vel_Right_K_1 = 0;
+
 float uLeft = 5.0;
 float uRight = 5.0;
 
@@ -173,7 +176,7 @@ float accelz_offset = 0;
 float gyrox_offset = 0;
 float gyroy_offset = 0;
 float gyroz_offset = 0;
-float accelzBalancePoint = -.76;
+float accelzBalancePoint = -.6;
 int16 IMU_data[9];
 uint16_t temp=0;
 int16_t doneCal = 0;
@@ -199,6 +202,40 @@ float kalman_K = 0;
 int32_t timecount = 0;
 int16_t calibration_state = 0;
 int32_t calibration_count = 0;
+
+float WhlDiff = 0;
+float WhlDiff_1 = 0;
+float vel_WhlDiff = 0;
+float vel_WhlDiff_1 = 0;
+
+float turnref = 0;
+float turnref_1 = 0;
+float errorDiff = 0;
+float errorDiff_1 = 0;
+float I_diff_turn = 0;
+float I_diff_turn_1 = 0;
+float Kp_turn = 3.0;
+float Ki_turn = 20.0;
+float Kd_turn = 0.08;
+float u_turn = 0;
+
+float LeftWheel_1 = 0;
+float RightWheel_1 = 0;
+
+float turnrate = 0;
+float turnrate_1 = 0;
+
+float ForwardBackwardCommand = 0;
+
+float eSpeed = 0;
+float eSpeed_1 = 0;
+float IK_eSpeed = 0;
+float IK_eSpeed_1 = 0;
+
+float KpSpeed = 0.35;
+float KiSpeed = 1.5;
+
+float Segbot_refSpeed = 0;
 
 //YL$JR$ Use a saturate function from HW
 float saturate(float input, float saturation_limit_L, float saturation_limit_H)
@@ -681,11 +718,31 @@ __interrupt void SWI_isr(void) {
     EINT;                                 // Clear INTM to enable interrupts
 
     // Insert SWI ISR Code here.......
+
+
+
     PosLeft_K = LeftWheel/5.1;
     PosRight_K = RightWheel/5.1;
 
-    vel_Left_K = 0.6*vel_Left_K + 100*(PosLeft_K - PosLeft_K_1);
-    vel_Right_K = 0.6*vel_Right_K + 100*(PosRight_K - PosRight_K_1);
+    WhlDiff = LeftWheel - RightWheel;
+
+    vel_Left_K = 0.6*vel_Left_K_1 + 100*(LeftWheel - LeftWheel_1);
+    vel_Right_K = 0.6*vel_Right_K_1 + 100*(RightWheel - RightWheel_1);
+
+    vel_WhlDiff = 0.333*vel_WhlDiff_1 + 166.667*(WhlDiff - WhlDiff_1);
+
+    turnref = turnref_1 + 0.004*(turnrate + turnrate_1)*0.5;
+
+    errorDiff = turnref - WhlDiff;
+
+    I_diff_turn = I_diff_turn_1 + 0.004*(errorDiff + errorDiff_1)*0.5;
+
+    u_turn = Kp_turn*errorDiff + Ki_turn*I_diff_turn - Kd_turn*vel_WhlDiff;
+    u_turn = saturate(u_turn, -4.0, 4.0);
+
+    if (fabs(u_turn) > 3){
+        I_diff_turn = I_diff_turn_1;
+    }
 
     gyrorate_dot = 0.6*gyrorate_dot + 100*(gyro_value - gyro_value_K_1);
 
@@ -696,15 +753,89 @@ __interrupt void SWI_isr(void) {
 
     ubal = -K1*tilt_value - K2*gyro_value - K3*(vel_Left_K + vel_Right_K)/2.0 - K4*gyrorate_dot;
 
-    uLeft = ubal/2;
-    uRight = ubal/2;
+    //avgWheel = (vel_Left_K + vel_Right_K)*0.5;
+    eSpeed = (Segbot_refSpeed - (vel_Left_K + vel_Right_K)/2.0);
+    IK_eSpeed = IK_eSpeed_1 + 0.004*(eSpeed + eSpeed_1)*0.5;
+    ForwardBackwardCommand = KpSpeed*eSpeed + KiSpeed*IK_eSpeed;
+
+    if (fabs(ForwardBackwardCommand) > 3){
+        IK_eSpeed = IK_eSpeed_1;
+    }
+
+    ForwardBackwardCommand = saturate(ForwardBackwardCommand, -4.0, 4.0);
+
+    uLeft = ubal/2.0 + u_turn - ForwardBackwardCommand;
+    uRight = ubal/2.0 - u_turn - ForwardBackwardCommand;
 
     setEPWM2A(uRight);
     setEPWM2B(-uLeft);
 
+    bearing = R_Wh/W_R*(RightWheel - LeftWheel);
+
+    angle_avg = 0.5*(RightWheel + LeftWheel);
+    angle_avg_dot = (angle_avg - angle_avg_K_1)/0.004;
+    x_dot = R_Wh*angle_avg_dot*cos(bearing);
+    y_dot = R_Wh*angle_avg_dot*sin(bearing);
+
+    x = x + 0.5*(x_dot + x_dot_K_1)*0.004;
+    y = y + 0.5*(y_dot + y_dot_K_1)*0.004;
+
+
+    LeftWheel_1 = LeftWheel;
+    RightWheel_1 = RightWheel;
+
     PosLeft_K_1 = PosLeft_K;
     PosRight_K_1 = PosRight_K;
+
+    vel_Left_K_1 = vel_Left_K;
+    vel_Right_K_1 = vel_Right_K;
+
     gyro_value_K_1 = gyro_value;
+
+    errorDiff_1 = errorDiff;
+    WhlDiff_1 = WhlDiff;
+    I_diff_turn_1 = I_diff_turn;
+    vel_WhlDiff_1 = vel_WhlDiff;
+    turnref_1 = turnref;
+    turnrate_1 = turnrate;
+    IK_eSpeed_1 = IK_eSpeed;
+    eSpeed_1 = eSpeed;
+
+    x_dot_K_1 = x_dot;
+    y_dot_K_1 = y_dot;
+    angle_avg_K_1 = angle_avg;
+
+    if (NewLVData == 1) {
+        NewLVData = 0;
+        Segbot_refSpeed = fromLVvalues[0];
+        turnrate = fromLVvalues[1];
+        printLV3 = fromLVvalues[2];
+        printLV4 = fromLVvalues[3];
+        printLV5 = fromLVvalues[4];
+        printLV6 = fromLVvalues[5];
+        printLV7 = fromLVvalues[6];
+        printLV8 = fromLVvalues[7];
+    }
+    if((CpuTimer1.InterruptCount%62) == 0) { // change to the counter variable of you selected 4ms. timer
+        DataToLabView.floatData[0] = x;
+        DataToLabView.floatData[1] = y;
+        DataToLabView.floatData[2] = bearing;
+        DataToLabView.floatData[3] = 2.0*((float)numSWIcalls)*.001;
+        DataToLabView.floatData[4] = 3.0*((float)numSWIcalls)*.001;
+        DataToLabView.floatData[5] = (float)numSWIcalls;
+        DataToLabView.floatData[6] = (float)numSWIcalls*4.0;
+        DataToLabView.floatData[7] = (float)numSWIcalls*5.0;
+        LVsenddata[0] = '*'; // header for LVdata
+        LVsenddata[1] = '$';
+        for (int i=0;i<LVNUM_TOFROM_FLOATS*4;i++) {
+            if (i%2==0) {
+                LVsenddata[i+2] = DataToLabView.rawData[i/2] & 0xFF;
+            } else {
+                LVsenddata[i+2] = (DataToLabView.rawData[i/2]>>8) & 0xFF;
+            }
+        }
+        serial_sendSCID(&SerialD, LVsenddata, 4*LVNUM_TOFROM_FLOATS + 2);
+    }
 
     numSWIcalls++;
 
