@@ -4,6 +4,14 @@
 // TITLE:  Final Project Code
 //#############################################################################
 
+/*
+ * Index of Comments:
+ *
+ * NAL: Nick and Linh
+ * YL$JR$ and $YL : Yongseok
+ *
+ * */
+
 // Included Files
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,10 +96,10 @@ float gyroy = 0;
 float gyroz = 0;
 
 float gyrorate_dot = 0;
-float K1 = 0;
-float K2 = 0;
-float K3 = 0;
-float K4 = 0;
+float K1 = -60;
+float K2 = -4.5;
+float K3 = -1.1;
+float K4 = -0.1;
 
 float ubal = 0;
 
@@ -239,15 +247,33 @@ float KiSpeed = 1.5;
 float Segbot_refSpeed = 0;
 
 float dutyCyc = 0; // FROM NAL LAB 3
-float currAngle1 = 0;
-float currAngle2 = 0;
-float desiredAngle1 = 45;
-float desiredAngle2 = 45;
+float currAngle1 = 45;
+float currAngle2 = -45;
+
+int16 startupTimer = 0;
 
 int16 checkTilt();
+int16 tiltState = 0;
+
 int16 restart_wheel = 0;
+int16 stateMachineState = 0;
+int16 raisingArmsFront = 0;
+int16 loweringArmsFront = 0;
+/* Curr Angle 1 left
+ * up = 65
+ * down = -20
+ *
+ * Curr Angle 2
+ * up = -85
+ * down = 0
+ */
+int16 arm1DownAngle = -20;
+int16 arm1UpAngle = 65;
+int16 arm2UpAngle = -85;
+int16 arm2DownAngle = 0;
 
-
+float desiredAngle1 = 65;
+float desiredAngle2 = -85;
 
 //YL$JR$ Use a saturate function from HW
 float saturate(float input, float saturation_limit_L, float saturation_limit_H)
@@ -270,10 +296,10 @@ float saturate(float input, float saturation_limit_L, float saturation_limit_H)
 int16 checkTilt()
 {
     // First check to see if it fell forward onto its 3d_printed supports
-    if (tilt_value > .55) {
-        return 1;
-    } else if (tilt_value < -.45) {
+    if (tilt_value > .70) {
         return -1;
+    } else if (tilt_value < .25) {
+        return 1;
     } else {
         return 0;
     }
@@ -342,7 +368,7 @@ void init_eQEPs(void) {
 
     // setup QEP2 pins for input
     EALLOW;
-    //Disable internal pull-up for the selected output pinsfor reduced power consumption
+    //Disable internal pull-up for the selected output pinsfor reduced power coNALumption
     GpioCtrlRegs.GPBPUD.bit.GPIO54 = 1; // Disable pull-up on GPIO54 (EQEP2A)
     GpioCtrlRegs.GPBPUD.bit.GPIO55 = 1; // Disable pull-up on GPIO55 (EQEP2B)
     GpioCtrlRegs.GPBQSEL2.bit.GPIO54 = 2; // Qual every 6 samples
@@ -380,7 +406,14 @@ float readEncRight(void) {
     // of the DC motor's back shaft. Then the gear motor's gear ratio is 30:1.
     return (raw*(2*PI)/12000.0);
 }
-
+/* Curr Angle 2
+ * left 45 = up
+ * left -15 = down
+ *
+ * Curr Angle 1
+ * right -45 = up
+ * right 0 = down
+ */
 void main(void)
 {
     // PLL, WatchDog, enable Peripheral Clocks
@@ -563,7 +596,7 @@ void main(void)
     InitPieVectTable();
 
     // Interrupts that are used in this example are re-mapped to
-    // ISR functions found within this project
+    // ISR functioNAL found within this project
     EALLOW;  // This is needed to write to EALLOW protected registers
     PieVectTable.TIMER0_INT = &cpu_timer0_isr;
     PieVectTable.TIMER1_INT = &cpu_timer1_isr;
@@ -658,7 +691,7 @@ void main(void)
     EPwm8Regs.CMPA.bit.CMPA = 0; //NAL: start duty cycle at 0%
     EPwm8Regs.AQCTLA.bit.CAU = 1;//NAL:  have the signal pin be cleared when the TBCTR register reaches the value in CMPA
     EPwm8Regs.AQCTLA.bit.ZRO = 2;//NAL: have the pin be set when the TBCTR register is zero
-    //NAL: set the PinMux so EPWM8A is used instead of GPIO14
+    //NAL: set the PinMux so EPWM8A is used iNALtead of GPIO14
     GPIO_SetupPinMux(14, GPIO_MUX_CPU1, 1); //GPIO PinName, CPU, Mux Index from mux chart
 
     //NAL: For 8B
@@ -747,7 +780,8 @@ void main(void)
         if (UARTPrint == 1 ) {
             //serial_printf(&SerialA,"LeftWheel: %.3f rad, RightWheel: %.3f rad, LeftPosition: %.3f ft, RightPosition: %.3f ft, LeftVelocity: %.3f ft/s, RightVelocity: %.3f ft/s  \r\n",LeftWheel, RightWheel, PosLeft_K, PosRight_K, VLeftK, VRightK);
             //serial_printf(&SerialA,"ADCINA2Voltage: %.3f V, ADCINA3Voltage: %.3f V, accelz: %.3f g, gyrox: %.3f deg, LeftWheel: %.3f rad, RightWheel: %.3f rad \r\n",filteredVol2, filteredVol3,accelz,gyrox,LeftWheel, RightWheel);
-            serial_printf(&SerialA,"tilt_value: %.3f, gyro_value: %.3f, accelz: %.3f g, gyrox: %.3f deg, LeftWheel: %.3f rad, RightWheel: %.3f rad \r\n",tilt_value, gyro_value,accelz,gyrox,LeftWheel, RightWheel);
+            //serial_printf(&SerialA,"tilt_value: %.3f, gyro_value: %.3f, accelz: %.3f g, gyrox: %.3f deg, LeftWheel: %.3f rad, RightWheel: %.3f rad \r\n",tilt_value, gyro_value,accelz,gyrox,LeftWheel, RightWheel);
+            serial_printf(&SerialA,"Desired Arm 1 Angle: %d Current Arm 1 Angle: %d Desired Arm 2 Angle: %d  Current Arm 2 Angle: %d \r\n", desiredAngle1, currAngle1, desiredAngle2, currAngle2);
             UARTPrint = 0;
         }
     }
@@ -765,94 +799,146 @@ __interrupt void SWI_isr(void) {
 
     // Insert SWI ISR Code here.......
 
-
-
-    PosLeft_K = LeftWheel/5.1;
-    PosRight_K = RightWheel/5.1;
-
-    WhlDiff = LeftWheel - RightWheel;
-    //
+    // NAL: Balance Control
     vel_Left_K = 0.6*vel_Left_K_1 + 100*(LeftWheel - LeftWheel_1);
     vel_Right_K = 0.6*vel_Right_K_1 + 100*(RightWheel - RightWheel_1);
     gyrorate_dot = 0.6*gyrorate_dot + 100*(gyro_value - gyro_value_K_1);
     ubal = -K1*tilt_value - K2*gyro_value - K3*(vel_Left_K + vel_Right_K)/2.0 - K4*gyrorate_dot;
 
+    // NAL: Turn Control
+    WhlDiff = LeftWheel - RightWheel;
     vel_WhlDiff = 0.333*vel_WhlDiff_1 + 166.667*(WhlDiff - WhlDiff_1);
-
     turnref = turnref_1 + 0.004*(turnrate + turnrate_1)*0.5;
-
     errorDiff = turnref - WhlDiff;
-
     I_diff_turn = I_diff_turn_1 + 0.004*(errorDiff + errorDiff_1)*0.5;
-
     u_turn = Kp_turn*errorDiff + Ki_turn*I_diff_turn - Kd_turn*vel_WhlDiff;
     u_turn = saturate(u_turn, -4.0, 4.0);
-
     if (fabs(u_turn) > 3){
         I_diff_turn = I_diff_turn_1;
     }
 
-
-
-    K1 = -60;
-    K2 = -4.5;
-    K3 = -1.1;
-    K4 = -0.1;
-
-
-
-    //avgWheel = (vel_Left_K + vel_Right_K)*0.5;
+    // NAL: Speed Control
+    PosLeft_K = LeftWheel/5.1;
+    PosRight_K = RightWheel/5.1;
     eSpeed = (Segbot_refSpeed - (vel_Left_K + vel_Right_K)/2.0);
     IK_eSpeed = IK_eSpeed_1 + 0.004*(eSpeed + eSpeed_1)*0.5;
     ForwardBackwardCommand = KpSpeed*eSpeed + KiSpeed*IK_eSpeed;
-
     if (fabs(ForwardBackwardCommand) > 3){
         IK_eSpeed = IK_eSpeed_1;
     }
-
     ForwardBackwardCommand = saturate(ForwardBackwardCommand, -4.0, 4.0);
 
-    //$YL
-    if (checkTilt() != 0 || restart_wheel != 1){
-        uLeft = 0; //$YL If the segbot cannot restore balance, it stops turning the wheels
-        uRight = 0;
+    // NAL: State Machine Code
+    tiltState = checkTilt();
+    if (startupTimer < 2500) {
+        startupTimer++;
+    } else {
+        if (tiltState != 0 && raisingArmsFront != 1 && loweringArmsFront != 1){ // NAL: If it has fallen either direction and is not raising or lowering its arms
+            stateMachineState = 1;
+            uLeft = 0; //$YL If the segbot cannot restore balance, it stops turning the wheels
+            uRight = 0;
+            setEPWM2A(uRight);
+            setEPWM2B(-uLeft);
+            restart_wheel = 0;
 
-        restart_wheel = 0;
+            if (tiltState == 1) {// NAL: Fell forward
+                loweringArmsFront = 1;
+            }
 
-        if (fabs(tilt_value) < 0.2){
-            restart_wheel = 1;
+        } else if (restart_wheel != 1) { // NAL: Wheels are currently off
+
+            // NAL: Front Arms Moving
+            if (raisingArmsFront == 1) { // NAL: Check to see if the forward arms are currently in the process of raising
+                stateMachineState = 2;
+                if (fabs(currAngle1 - arm1UpAngle) < 5 && fabs(currAngle1 - arm1UpAngle) < 5) {
+                    raisingArmsFront = 0;
+                } else {
+                    desiredAngle1 = arm1UpAngle;
+                    desiredAngle2 = arm2UpAngle;
+
+                }
+            } else if (loweringArmsFront == 1){ // NAL: Check to see if the forward arms are currently in the process of lowering
+                stateMachineState = 3;
+                if (tiltState == 0){ // NAL: If robot is upright, stop lowering arms and start raising arms
+                    loweringArmsFront = 0;
+                    raisingArmsFront = 1;
+                } else { // NAL: If robot is not upright, lower arms
+                    desiredAngle1 = arm1DownAngle;
+                    desiredAngle2 = arm2DownAngle;
+                }
+
+            // NAL: Back Arms Moving
+            //} else if (raisingArmsBack == 1) { // NAL: Check to see if the back arms are currently in the process of raising
+//                stateMachineState = 4;
+//                if () {
+//                    raisingArmsBack = 0;
+//                } else {
+//                    desiredAngle3 = arm3UpAngle;
+//                }
+//            } else if (loweringArmsBack == 1){ // NAL: Check to see if the back arms are currently in the process of lowering
+//                stateMachineState = 5;
+//                if (tiltState == 0){ // NAL: If robot is upright, stop lowering arms and start raising arms
+//                    loweringArmsBack = 0;
+//                    raisingArmsBack = 1;
+//                } else { // NAL: If robot is not upright, lower arms
+//                    desiredAngle3 = arm3DownAngle;
+//                }
+
+            // NAL: The arms are not raising and not lowering (Should not get here logically speaking unless the robot is upright
+            } else {
+                stateMachineState = 6;
+                if (tiltState == 0) { // Check to see if the robot is upright (see above comment).
+                    restart_wheel = 1; // If the robot is upright and arms are not moving, restart wheel control
+                }
+//                else { // Should not ever get here, but if it does happen, lower arms
+//                    loweringArmsFront = 1;
+//                }
+            }
+        } else { // NAL:  It has not fallen and the wheels are on
+            stateMachineState = 5;
+            uLeft = ubal/2.0 + u_turn - ForwardBackwardCommand;
+            uRight = ubal/2.0 - u_turn - ForwardBackwardCommand;
+            setEPWM2A(uRight);
+            setEPWM2B(-uLeft);
         }
-
-    }else{
-        uLeft = ubal/2.0 + u_turn - ForwardBackwardCommand;
-        uRight = ubal/2.0 - u_turn - ForwardBackwardCommand;
     }
 
-    setEPWM2A(uRight);
-    setEPWM2B(-uLeft);
+    // Make the servos go where they are supposed to go at a reasonable pace
 
+    // NAL: Servo 1 (Front left
+    if ((desiredAngle1 - currAngle1) > .50) {//NAL: if the desired angle 1 is at least .5 greater than the current angle 1, further increase angle by .05
+        currAngle1 = currAngle1 + .05;
+    } else if ((desiredAngle1 - currAngle1) < -.50){
+        currAngle1 = currAngle1 - .05;
+    }
+
+    // NAL: Servo 2 (Front right)
+    if ((desiredAngle2 - currAngle2) > .50) {//NAL: if the desired angle 1 is at least .5 greater than the current angle 1, further increase angle by .05
+        currAngle2 = currAngle2 + .05;
+    } else if ((desiredAngle2 - currAngle2) < -.50){
+        currAngle2 = currAngle2 - .05;
+    }
+    setEPWM8A_RCServo(currAngle1); //NAL: direct motor connected to EPWM8A to go to "currangle"
+    setEPWM8B_RCServo(currAngle2);//NAL: direct motor connected to EPWM8B to go to "currangle"
+
+//    setEPWM2A(uRight);
+//    setEPWM2B(-uLeft);
+
+    // Set 'new' variables to 'old'
     bearing = R_Wh/W_R*(RightWheel - LeftWheel);
-
     angle_avg = 0.5*(RightWheel + LeftWheel);
     angle_avg_dot = (angle_avg - angle_avg_K_1)/0.004;
     x_dot = R_Wh*angle_avg_dot*cos(bearing);
     y_dot = R_Wh*angle_avg_dot*sin(bearing);
-
     x = x + 0.5*(x_dot + x_dot_K_1)*0.004;
     y = y + 0.5*(y_dot + y_dot_K_1)*0.004;
-
-
     LeftWheel_1 = LeftWheel;
     RightWheel_1 = RightWheel;
-
     PosLeft_K_1 = PosLeft_K;
     PosRight_K_1 = PosRight_K;
-
     vel_Left_K_1 = vel_Left_K;
     vel_Right_K_1 = vel_Right_K;
-
     gyro_value_K_1 = gyro_value;
-
     errorDiff_1 = errorDiff;
     WhlDiff_1 = WhlDiff;
     I_diff_turn_1 = I_diff_turn;
@@ -861,11 +947,11 @@ __interrupt void SWI_isr(void) {
     turnrate_1 = turnrate;
     IK_eSpeed_1 = IK_eSpeed;
     eSpeed_1 = eSpeed;
-
     x_dot_K_1 = x_dot;
     y_dot_K_1 = y_dot;
     angle_avg_K_1 = angle_avg;
 
+    // Lab View Data Transfer
     if (NewLVData == 1) {
         NewLVData = 0;
         Segbot_refSpeed = fromLVvalues[0];
@@ -987,25 +1073,27 @@ __interrupt void cpu_timer2_isr(void)
         //UARTPrint = 1;
     }
 
-    //NAL: For motors
-    //=======================================================
-    if ((desiredAngle1 - currAngle1) > .50) {//NAL: if the desired angle 1 is at least .5 greater than the current angle 1, further increase angle by .05
-        currAngle1 = currAngle1 + .05;
-    } else if ((desiredAngle1 - currAngle1) < -.50){
-        currAngle1 = currAngle1 - .05;
-    }
-
-    if ((desiredAngle2 - currAngle2) > .50) {//NAL: if the desired angle 1 is at least .5 greater than the current angle 1, further increase angle by .05
-        currAngle2 = currAngle2 + .05;
-    } else if ((desiredAngle2 - currAngle2) < -.50){
-        currAngle2 = currAngle2 - .05;
-    }
-
-    if ((CpuTimer2.InterruptCount % 2500) == 0){
-        desiredAngle1 = desiredAngle1 * -1;
-        desiredAngle2 = desiredAngle2 * -1;
-    }
-
+//    //NAL: For motors
+//    //=======================================================
+//    if ((desiredAngle1 - currAngle1) > .50) {//NAL: if the desired angle 1 is at least .5 greater than the current angle 1, further increase angle by .05
+//        currAngle1 = currAngle1 + .05;
+//    } else if ((desiredAngle1 - currAngle1) < -.50){
+//        currAngle1 = currAngle1 - .05;
+//    }
+//
+//    if ((desiredAngle2 - currAngle2) > .50) {//NAL: if the desired angle 1 is at least .5 greater than the current angle 1, further increase angle by .05
+//        currAngle2 = currAngle2 + .05;
+//    } else if ((desiredAngle2 - currAngle2) < -.50){
+//        currAngle2 = currAngle2 - .05;
+//    }
+//
+//    if ((CpuTimer2.InterruptCount % 2500) == 0){
+//        desiredAngle1 = desiredAngle1 * -1;
+//        desiredAngle2 = desiredAngle2 * -1;
+//    }
+//
+//    setEPWM8A_RCServo(currAngle1); //NAL: direct motor connected to EPWM8A to go to "currangle"
+//    setEPWM8B_RCServo(currAngle2);//NAL: direct motor connected to EPWM8B to go to "currangle"
 
 //    if (currAngle >= 90.0) {//NAL: start decreasing controleffort if its value reaches 90
 //        increaseOrDecreaseMotors = 0;
@@ -1018,8 +1106,7 @@ __interrupt void cpu_timer2_isr(void)
 //        currAngle = currAngle - .05;
 //    }
 
-    setEPWM8A_RCServo(currAngle1); //NAL: direct motor connected to EPWM8A to go to "currangle"
-    setEPWM8B_RCServo(currAngle2);//NAL: direct motor connected to EPWM8B to go to "currangle"
+
 
     CpuTimer2.InterruptCount++;
 }
@@ -1138,7 +1225,7 @@ void setupSpib(void)//Call this function in main() somewhere after the DINT; lin
 {
     int16_t temp = 0;
     //Step 1.
-    // cut and paste here all the SpibRegs initializations you found for part 3. Make sure the TXdelay in between each transfer to 0. Also don’t forget to cut and paste the GPIO settings for GPIO9, 63, 64, 65, 66 which are also a part of the SPIB setup.
+    // cut and paste here all the SpibRegs initializations you found for part 3. Make sure the TXdelay in between each traNALfer to 0. Also don’t forget to cut and paste the GPIO settings for GPIO9, 63, 64, 65, 66 which are also a part of the SPIB setup.
     GPIO_SetupPinMux(9, GPIO_MUX_CPU1, 0); // Set as GPIO9 and used as DAN28027 SS
     GPIO_SetupPinOptions(9, GPIO_OUTPUT, GPIO_PUSHPULL); // Make GPIO9 an Output Pin
     GpioDataRegs.GPASET.bit.GPIO9 = 1; //Initially Set GPIO9/SS High so DAN28027 is not selected
@@ -1150,7 +1237,7 @@ void setupSpib(void)//Call this function in main() somewhere after the DINT; lin
     GPIO_SetupPinMux(65, GPIO_MUX_CPU1, 15); //Set GPIO65 pin to SPICLKB
 
     EALLOW;
-    GpioCtrlRegs.GPBPUD.bit.GPIO63 = 0; // Enable Pull-ups on SPI PINs Recommended by TI for SPI Pins
+    GpioCtrlRegs.GPBPUD.bit.GPIO63 = 0; // Enable Pull-ups on SPI pins Recommended by TI for SPI pins
     GpioCtrlRegs.GPCPUD.bit.GPIO64 = 0;
     GpioCtrlRegs.GPCPUD.bit.GPIO65 = 0;
     GpioCtrlRegs.GPBQSEL2.bit.GPIO63 = 3; // Set I/O pin to asynchronous mode recommended for SPI
@@ -1169,7 +1256,7 @@ void setupSpib(void)//Call this function in main() somewhere after the DINT; lin
     SpibRegs.SPIBRR.bit.SPI_BIT_RATE = 49; // Set SCLK bit rate to 1 MHz so 1us period. SPI base clock is
     // 50MHZ. And this setting divides that base clock to create SCLK’s period
     SpibRegs.SPISTS.all = 0x0000; // Clear status flags just in case they are set for some reason
-    SpibRegs.SPIFFTX.bit.SPIRST = 1;// Pull SPI FIFO out of reset, SPI FIFO can resume transmit or receive.
+    SpibRegs.SPIFFTX.bit.SPIRST = 1;// Pull SPI FIFO out of reset, SPI FIFO can resume traNALmit or receive.
     SpibRegs.SPIFFTX.bit.SPIFFENA = 1; // Enable SPI FIFO enhancements
     SpibRegs.SPIFFTX.bit.TXFIFO = 0; // Write 0 to reset the FIFO pointer to zero, and hold in reset
     SpibRegs.SPIFFTX.bit.TXFFINTCLR = 1; // Write 1 to clear SPIFFTX[TXFFINT] flag just in case it is set
@@ -1177,9 +1264,9 @@ void setupSpib(void)//Call this function in main() somewhere after the DINT; lin
     SpibRegs.SPIFFRX.bit.RXFFOVFCLR = 1; // Write 1 to clear SPIFFRX[RXFFOVF] just in case it is set
     SpibRegs.SPIFFRX.bit.RXFFINTCLR = 1; // Write 1 to clear SPIFFRX[RXFFINT] flag just in case it is set
     SpibRegs.SPIFFRX.bit.RXFFIENA = 1; // Enable the RX FIFO Interrupt. RXFFST >= RXFFIL
-    SpibRegs.SPIFFCT.bit.TXDLY = 16; //Set delay between transmits to 16 spi clocks. Needed by DAN28027 chip
+    SpibRegs.SPIFFCT.bit.TXDLY = 16; //Set delay between traNALmits to 16 spi clocks. Needed by DAN28027 chip
     SpibRegs.SPICCR.bit.SPISWRESET = 1; // Pull the SPI out of reset
-    SpibRegs.SPIFFTX.bit.TXFIFO = 1; // Release transmit FIFO from reset.
+    SpibRegs.SPIFFTX.bit.TXFIFO = 1; // Release traNALmit FIFO from reset.
     SpibRegs.SPIFFRX.bit.RXFIFORESET = 1; // Re-enable receive FIFO operation
     SpibRegs.SPICTL.bit.SPIINTENA = 1; // Enables SPI interrupt. !! I don’t think this is needed. Need to Test
     SpibRegs.SPIFFRX.bit.RXFFIL = 16; //Interrupt Level to 16 words or more received into FIFO causes interrupt. This is just the initial setting for the register. Will be changed below
@@ -1190,11 +1277,11 @@ void setupSpib(void)//Call this function in main() somewhere after the DINT; lin
     //---------------------------------------------------------------------------------------------------
     //--------------
     //Step 2.
-    // perform a multiple 16-bit transfer to initialize MPU-9250 registers 0x13,0x14,0x15,0x16
+    // perform a multiple 16-bit traNALfer to initialize MPU-9250 registers 0x13,0x14,0x15,0x16
     // 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C 0x1D, 0x1E, 0x1F. Use only one SS low to high for all these writes
     // some code is given, most you have to fill you yourself.
     GpioDataRegs.GPCCLEAR.bit.GPIO66 = 1; // Slave Select Low
-    // Perform the number of needed writes to SPITXBUF to write to all 13 registers. Remember we are sending 16-bit transfers, so two registers at a time after the first 16-bit transfer.
+    // Perform the number of needed writes to SPITXBUF to write to all 13 registers. Remember we are sending 16-bit traNALfers, so two registers at a time after the first 16-bit traNALfer.
     SpibRegs.SPITXBUF = 0x1300;// To address 00x13 write 0x00
     SpibRegs.SPITXBUF = 0x0000;// To address 00x14 write 0x00
     // To address 00x15 write 0x00
@@ -1214,9 +1301,9 @@ void setupSpib(void)//Call this function in main() somewhere after the DINT; lin
     while(SpibRegs.SPIFFRX.bit.RXFFST !=0){
         temp = SpibRegs.SPIRXBUF;
     }    // ???? read the additional number of garbage receive values off the RX FIFO to clear out the RX FIFO
-    DELAY_US(10); // Delay 10us to allow time for the MPU-2950 to get ready for next transfer.
+    DELAY_US(10); // Delay 10us to allow time for the MPU-2950 to get ready for next traNALfer.
     //Step 3.
-    // perform a multiple 16-bit transfer to initialize MPU-9250 registers 0x23,0x24,0x25,0x26
+    // perform a multiple 16-bit traNALfer to initialize MPU-9250 registers 0x23,0x24,0x25,0x26
     // 0x27, 0x28, 0x29. Use only one SS low to high for all these writes
     // some code is given, most you have to fill you yourself.
     GpioDataRegs.GPCCLEAR.bit.GPIO66 = 1; // Slave Select Low
@@ -1234,9 +1321,9 @@ void setupSpib(void)//Call this function in main() somewhere after the DINT; lin
     while(SpibRegs.SPIFFRX.bit.RXFFST !=0){
         temp = SpibRegs.SPIRXBUF;
     }    // ???? read the additional number of garbage receive values off the RX FIFO to clear out the RX FIFO
-    DELAY_US(10); // Delay 10us to allow time for the MPU-2950 to get ready for next transfer.
+    DELAY_US(10); // Delay 10us to allow time for the MPU-2950 to get ready for next traNALfer.
     //Step 4.
-    // perform a single 16-bit transfer to initialize MPU-9250 register 0x2A
+    // perform a single 16-bit traNALfer to initialize MPU-9250 register 0x2A
     GpioDataRegs.GPCCLEAR.bit.GPIO66 = 1;
     SpibRegs.SPITXBUF = 0x2A81;// Write to address 0x2A the value 0x81
     // wait for one byte to be received
@@ -1323,7 +1410,7 @@ void setupSpib(void)//Call this function in main() somewhere after the DINT; lin
     GpioDataRegs.GPCSET.bit.GPIO66 = 1;
     temp = SpibRegs.SPIRXBUF;
     DELAY_US(50);
-    // Clear SPIB interrupt source just in case it was issued due to any of the above initializations.
+    // Clear SPIB interrupt source just in case it was issued due to any of the above initializatioNAL.
     SpibRegs.SPIFFRX.bit.RXFFOVFCLR=1; // Clear Overflow flag
     SpibRegs.SPIFFRX.bit.RXFFINTCLR=1; // Clear Interrupt flag
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP6;
