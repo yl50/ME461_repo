@@ -249,7 +249,7 @@ float Segbot_refSpeed = 0;
 float dutyCyc = 0; // FROM NAL LAB 3
 float currAngle1 = 45;
 float currAngle2 = -45;
-
+float currAngle3 = -85;
 int16 startupTimer = 0;
 
 int16 checkTilt();
@@ -267,13 +267,16 @@ int16 loweringArmsFront = 0;
  * up = -85
  * down = 0
  */
-int16 arm1DownAngle = -20;
-int16 arm1UpAngle = 65;
-int16 arm2UpAngle = -85;
-int16 arm2DownAngle = 0;
+int16 arm1DownAngle = -10;
+int16 arm1UpAngle = 55;
+int16 arm2UpAngle = -75;
+int16 arm2DownAngle = -10;
+int16 arm3UpAngle = -85;
+int16 arm3DownAngle = -10;
 
 float desiredAngle1 = 65;
 float desiredAngle2 = -85;
+float desiredAngle3 = -85;
 
 //YL$JR$ Use a saturate function from HW
 float saturate(float input, float saturation_limit_L, float saturation_limit_H)
@@ -296,9 +299,9 @@ float saturate(float input, float saturation_limit_L, float saturation_limit_H)
 int16 checkTilt()
 {
     // First check to see if it fell forward onto its 3d_printed supports
-    if (tilt_value > .70) {
+    if (tilt_value > .20) {
         return -1;
-    } else if (tilt_value < .25) {
+    } else if (tilt_value < -.2) {
         return 1;
     } else {
         return 0;
@@ -342,6 +345,17 @@ void setEPWM8B_RCServo(float angle){//NAL: Accepts a float angle between -90 and
     float dutyCyc = angle/22.5 + 8; //NAL: this is in percent as an integer (can also be in dec)
     EPwm8Regs.CMPB.bit.CMPB = (int16_t) (dutyCyc/100 * EPwm8Regs.TBPRD); // NAL: determine the needed value of CMPB
 }
+
+void setEPWM6A_RCServo(float angle){//NAL: Accepts a float angle between -90 and 90 to determine the duty cycle (hence angle) of the RC servos
+    if (angle > 90) {//NAL: Saturate input to 90 if above 90
+        angle = 90;
+    } else if (angle < -90){//NAL: Saturate input to -90 if below -90
+        angle=-90;
+    }
+    float dutyCyc = angle/22.5 + 8; //NAL: this is in percent as an integer (can also be in dec)
+    EPwm6Regs.CMPA.bit.CMPA = (int16_t) (dutyCyc/100 * EPwm6Regs.TBPRD); // NAL: determine the needed value of CMPA
+}
+
 //################################################################################
 void init_eQEPs(void) {
     // setup eQEP1 pins for input
@@ -658,6 +672,8 @@ void main(void)
     GpioCtrlRegs.GPAPUD.bit.GPIO3 = 1; // For EPWM2B
     GpioCtrlRegs.GPAPUD.bit.GPIO14 = 1; // For EPWM8A NAL
     GpioCtrlRegs.GPAPUD.bit.GPIO15 = 1; // For EPWM8B NAL
+    GpioCtrlRegs.GPAPUD.bit.GPIO10 = 1; // For EPWM6A NAL
+
     EDIS;
 
     EALLOW;
@@ -700,6 +716,26 @@ void main(void)
     EPwm8Regs.AQCTLB.bit.ZRO = 2;//NAL: have the pin be set when the TBCTR register is zero
     //NAL: set the PinMux so EPWM8B is used instead of GPIO15
     GPIO_SetupPinMux(15, GPIO_MUX_CPU1, 1); //GPIO PinName, CPU, Mux Index from mux chart
+
+    // NAL: ========= FOR 6
+    EPwm6Regs.TBCTL.bit.CTRMODE = 0;//NAL: Count up Mode
+    EPwm6Regs.TBCTL.bit.FREE_SOFT = 3; // 1x is 10 or 11 so 3 or 4 //NAL: Free Soft emulation mode to Free run
+    EPwm6Regs.TBCTL.bit.PHSEN = 0;
+    EPwm6Regs.TBCTL.bit.CLKDIV = 4; //NAL: set clock divide equal to 16 so that TBPRD can be set to a number that can fit into the 16 bit allowed for TBPDR
+
+    EPwm6Regs.TBCTR = 0;//NAL: start timer at 0
+
+    EPwm6Regs.TBPRD = 62500; //NAL: Set the period so that EPWM8 has the required RC Servo carrier frequency of 50Hz
+    //NAL: Calculation procedure: Clock divider = 16 => TBCNTR is 1/3125000 => TBPRD needs to be 3125000 / 50 = 62500 to achieve carrier frequency of 50Hz
+    EPwm6Regs.TBPHS.bit.TBPHS = 0;  //NAL: set the phase to 0
+
+    //NAL: For 6A
+    EPwm6Regs.CMPA.bit.CMPA = 0; //NAL: start duty cycle at 0%
+    EPwm6Regs.AQCTLA.bit.CAU = 1;//NAL:  have the signal pin be cleared when the TBCTR register reaches the value in CMPA
+    EPwm6Regs.AQCTLA.bit.ZRO = 2;//NAL: have the pin be set when the TBCTR register is zero
+    //NAL: set the PinMux so EPWM8A is used iNALtead of GPIO14
+    GPIO_SetupPinMux(10, GPIO_MUX_CPU1, 1); //GPIO PinName, CPU, Mux Index from mux chart
+
 
 
     EALLOW;
@@ -833,7 +869,7 @@ __interrupt void SWI_isr(void) {
     if (startupTimer < 2500) {
         startupTimer++;
     } else {
-        if (tiltState != 0 && raisingArmsFront != 1 && loweringArmsFront != 1){ // NAL: If it has fallen either direction and is not raising or lowering its arms
+        if (tiltState != 0 && loweringArmsFront != 1){ // NAL: If it has fallen either direction and is not raising or lowering its arms
             stateMachineState = 1;
             uLeft = 0; //$YL If the segbot cannot restore balance, it stops turning the wheels
             uRight = 0;
@@ -841,20 +877,21 @@ __interrupt void SWI_isr(void) {
             setEPWM2B(-uLeft);
             restart_wheel = 0;
 
-            if (tiltState == 1) {// NAL: Fell forward
-                loweringArmsFront = 1;
-            }
+//            if (tiltState == 1) {// NAL: Fell forward
+            loweringArmsFront = 1;
+//            }
 
         } else if (restart_wheel != 1) { // NAL: Wheels are currently off
 
             // NAL: Front Arms Moving
             if (raisingArmsFront == 1) { // NAL: Check to see if the forward arms are currently in the process of raising
                 stateMachineState = 2;
-                if (fabs(currAngle1 - arm1UpAngle) < 5 && fabs(currAngle1 - arm1UpAngle) < 5) {
+                if (fabs(currAngle1 - arm1UpAngle) < 5 && fabs(currAngle1 - arm1UpAngle) < 5 && fabs(currAngle3 - arm3UpAngle) < 5) {
                     raisingArmsFront = 0;
                 } else {
                     desiredAngle1 = arm1UpAngle;
                     desiredAngle2 = arm2UpAngle;
+                    desiredAngle3 = arm3UpAngle;
 
                 }
             } else if (loweringArmsFront == 1){ // NAL: Check to see if the forward arms are currently in the process of lowering
@@ -862,9 +899,14 @@ __interrupt void SWI_isr(void) {
                 if (tiltState == 0){ // NAL: If robot is upright, stop lowering arms and start raising arms
                     loweringArmsFront = 0;
                     raisingArmsFront = 1;
+                    restart_wheel = 1;
+                    desiredAngle1 = arm1UpAngle;
+                    desiredAngle2 = arm2UpAngle;
+                    desiredAngle3 = arm3UpAngle;
                 } else { // NAL: If robot is not upright, lower arms
                     desiredAngle1 = arm1DownAngle;
                     desiredAngle2 = arm2DownAngle;
+                    desiredAngle3 = arm3DownAngle;
                 }
 
             // NAL: Back Arms Moving
@@ -918,9 +960,16 @@ __interrupt void SWI_isr(void) {
     } else if ((desiredAngle2 - currAngle2) < -.50){
         currAngle2 = currAngle2 - .05;
     }
+
+    if ((desiredAngle3 - currAngle3) > .50) {//NAL: if the desired angle 1 is at least .5 greater than the current angle 1, further increase angle by .05
+        currAngle3 = currAngle3 + .05;
+    } else if ((desiredAngle3 - currAngle3) < -.50){
+        currAngle3 = currAngle3 - .05;
+    }
+
     setEPWM8A_RCServo(currAngle1); //NAL: direct motor connected to EPWM8A to go to "currangle"
     setEPWM8B_RCServo(currAngle2);//NAL: direct motor connected to EPWM8B to go to "currangle"
-
+    setEPWM6A_RCServo(currAngle3);
 //    setEPWM2A(uRight);
 //    setEPWM2B(-uLeft);
 
